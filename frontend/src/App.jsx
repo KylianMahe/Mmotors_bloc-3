@@ -24,30 +24,34 @@ export default function App() {
           <Route path="/search" element={<Search />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute role="user">
                 <CustomerDashboard />
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/applications/new"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute role="user">
                 <ApplicationForm />
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/applications"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute role="user">
                 <ApplicationStatus />
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/admin"
             element={
@@ -56,6 +60,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/admin/vehicles"
             element={
@@ -64,6 +69,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/admin/applications"
             element={
@@ -72,10 +78,10 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
     </AuthProvider>
   );
 }
-

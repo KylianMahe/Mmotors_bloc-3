@@ -34,6 +34,7 @@ const stats = [
 
 export default function Home() {
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   return (
     <div className="home-page">
@@ -43,18 +44,29 @@ export default function Home() {
           <h1>
             Trouvez le véhicule qui <span>vous correspond</span>
           </h1>
+
           <p className="hero-text">
             Recherchez un véhicule d’occasion, choisissez achat ou location, puis suivez votre
             dossier depuis un espace client simple et sécurisé.
           </p>
+
           <div className="actions hero-actions">
-            <Link className="button button-primary" to="/search">
-              Rechercher un véhicule
-            </Link>
-            <Link className="button button-outline" to={user ? "/applications" : "/login"}>
-              Suivre un dossier
-            </Link>
+            {isAdmin ? (
+              <Link className="button button-primary" to="/admin">
+                Ouvrir l’administration
+              </Link>
+            ) : (
+              <>
+                <Link className="button button-primary" to="/search">
+                  Rechercher un véhicule
+                </Link>
+                <Link className="button button-outline" to={user ? "/applications" : "/login"}>
+                  Suivre un dossier
+                </Link>
+              </>
+            )}
           </div>
+
           <div className="trust-row" aria-label="Garanties M-Motors">
             <span>Service sécurisé</span>
             <span>Données protégées</span>
@@ -71,6 +83,7 @@ export default function Home() {
               <div className="wheel wheel-right" />
             </div>
           </div>
+
           <div className="floating-card">
             <strong>Véhicules vérifiés</strong>
             <span>Sélectionnés pour leur qualité et leur fiabilité.</span>
