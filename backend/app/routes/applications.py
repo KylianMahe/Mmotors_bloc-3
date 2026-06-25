@@ -3,11 +3,13 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
 from app.models.application import Application
+from app.models.document import Document
 from app.models.user import User
 from app.schemas.application import ApplicationRead, DocumentRead
 from app.security.dependencies import get_current_user
@@ -21,6 +23,7 @@ ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg"}
 
 def serialize_application(application: Application) -> ApplicationRead:
     vehicle = application.vehicle
+
     return ApplicationRead(
         id=application.id,
         vehicle_id=application.vehicle_id,
@@ -47,12 +50,15 @@ def serialize_application(application: Application) -> ApplicationRead:
 def _store_file(application: Application, uploaded_file: UploadFile, db: Session) -> None:
     original_name = Path(uploaded_file.filename or "document.pdf").name
     extension = Path(original_name).suffix.lower()
+
     if extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Format de document non autorisé")
 
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
+
     stored_name = f"{application.id}_{uuid4().hex}{extension}"
     stored_path = settings.upload_dir / stored_name
+
     with stored_path.open("wb") as buffer:
         shutil.copyfileobj(uploaded_file.file, buffer)
 
@@ -63,6 +69,10 @@ def _store_file(application: Application, uploaded_file: UploadFile, db: Session
         stored_path=str(stored_path),
         content_type=uploaded_file.content_type,
     )
+
+
+def _can_access_document(document: Document, current_user: User) -> bool:
+    return current_user.role == "admin" or document.application.user_id == current_user.id
 
 
 @router.post("", response_model=ApplicationRead, status_code=status.HTTP_201_CREATED)
@@ -78,18 +88,22 @@ def submit_application(
         raise HTTPException(status_code=422, detail="Type de dossier invalide")
 
     vehicle = get_vehicle(db, vehicle_id)
+
     if vehicle is None:
         raise HTTPException(status_code=404, detail="Véhicule introuvable")
 
     expected_mode = "sale" if application_type == "purchase" else "rental"
+
     if vehicle.mode != expected_mode:
         raise HTTPException(status_code=400, detail="Le type de dossier ne correspond pas au véhicule")
 
     application = create_application(db, current_user, vehicle, application_type, message)
+
     for uploaded_file in documents or []:
         _store_file(application, uploaded_file, db)
 
     db.refresh(application)
+
     return serialize_application(application)
 
 
@@ -101,6 +115,32 @@ def my_applications(
     return [serialize_application(item) for item in list_user_applications(db, current_user)]
 
 
+@router.get("/documents/{document_id}/download")
+def download_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
+    document = db.query(Document).filter(Document.id == document_id).first()
+
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+
+    if not _can_access_document(document, current_user):
+        raise HTTPException(status_code=403, detail="Accès refusé")
+
+    stored_path = Path(document.stored_path)
+
+    if not stored_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier introuvable sur le serveur")
+
+    return FileResponse(
+        path=stored_path,
+        filename=document.filename,
+        media_type=document.content_type or "application/octet-stream",
+    )
+
+
 @router.get("/{application_id}", response_model=ApplicationRead)
 def application_detail(
     application_id: int,
@@ -108,9 +148,11 @@ def application_detail(
     current_user: User = Depends(get_current_user),
 ) -> ApplicationRead:
     application = db.query(Application).filter(Application.id == application_id).first()
+
     if application is None:
         raise HTTPException(status_code=404, detail="Dossier introuvable")
+
     if application.user_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Accès refusé")
-    return serialize_application(application)
 
+    return serialize_application(application)
